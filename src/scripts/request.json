@@ -1,0 +1,11 @@
+{
+  "run_id": "run_demo",
+  "parent_node_run_id": "node_run_root",
+  "node_runs": [
+    {
+      "node_type_ref": { "node_type_id": "atomic.echo", "version": "0.1.0" },
+      "inputs": { "message": "Hello from the template Run Coordinator" }
+    }
+  ]
+}
+
