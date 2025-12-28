@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
+from arp_auth import AuthClient
 from arp_standard_client.atomic_executor import AtomicExecutorClient
 from arp_standard_client.errors import ArpApiError
 from arp_standard_model import (
@@ -19,33 +20,39 @@ from arp_standard_model import (
 )
 from arp_standard_server import ArpServerError
 
-T = TypeVar("T")
-
+from ..auth import client_credentials_token
 
 class AtomicExecutorGatewayClient:
-    """Outgoing Atomic Executor client wrapper for the Run Coordinator template."""
+    """Outgoing Atomic Executor client wrapper for the Run Coordinator."""
 
     # Core method - API surface and main extension points
     def __init__(
         self,
         *,
         base_url: str,
-        bearer_token: str | None = None,
+        auth_client: AuthClient,
+        audience: str | None = None,
+        scope: str | None = None,
         client: AtomicExecutorClient | None = None,
+        client_factory: Callable[[Any], AtomicExecutorClient] | None = None,
     ) -> None:
         self.base_url = base_url
-        self._client = client or AtomicExecutorClient(base_url=base_url, bearer_token=bearer_token)
+        self._client = client or AtomicExecutorClient(base_url=base_url)
+        self._auth_client = auth_client
+        self._audience = audience
+        self._scope = scope
+        self._client_factory = client_factory or (lambda raw_client: AtomicExecutorClient(client=raw_client))
 
     # Core methods - outgoing Atomic Executor calls
     async def execute_atomic_node_run(self, body: AtomicExecuteRequest) -> AtomicExecuteResult:
         return await self._call(
-            self._client.execute_atomic_node_run,
+            "execute_atomic_node_run",
             AtomicExecutorExecuteAtomicNodeRunRequest(body=body),
         )
 
     async def cancel_atomic_node_run(self, node_run_id: str) -> None:
         return await self._call(
-            self._client.cancel_atomic_node_run,
+            "cancel_atomic_node_run",
             AtomicExecutorCancelAtomicNodeRunRequest(
                 params=AtomicExecutorCancelAtomicNodeRunParams(node_run_id=node_run_id)
             ),
@@ -53,18 +60,20 @@ class AtomicExecutorGatewayClient:
 
     async def health(self) -> Health:
         return await self._call(
-            self._client.health,
+            "health",
             AtomicExecutorHealthRequest(),
         )
 
     async def version(self) -> VersionInfo:
         return await self._call(
-            self._client.version,
+            "version",
             AtomicExecutorVersionRequest(),
         )
 
-    # Helpers (internal): implementation detail for the template.
-    async def _call(self, fn: Callable[[Any], T], request: Any) -> T:
+    # Helpers (internal): implementation detail for the reference implementation.
+    async def _call(self, method_name: str, request: Any) -> Any:
+        client = await self._client_for()
+        fn: Callable[[Any], Any] = getattr(client, method_name)
         try:
             return await asyncio.to_thread(fn, request)
         except ArpApiError as exc:
@@ -84,3 +93,13 @@ class AtomicExecutorGatewayClient:
                     "error": str(exc),
                 },
             ) from exc
+
+    async def _client_for(self) -> AtomicExecutorClient:
+        bearer_token = await client_credentials_token(
+            self._auth_client,
+            audience=self._audience,
+            scope=self._scope,
+            service_label="Atomic Executor",
+        )
+        raw_client = self._client.raw_client.with_headers({"Authorization": f"Bearer {bearer_token}"})
+        return self._client_factory(raw_client)

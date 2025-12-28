@@ -4,8 +4,7 @@
   "node_runs": [
     {
       "node_type_ref": { "node_type_id": "atomic.echo", "version": "0.1.0" },
-      "inputs": { "message": "Hello from the template Run Coordinator" }
+      "inputs": { "message": "Hello from JARVIS Run Coordinator" }
     }
   ]
 }
-
