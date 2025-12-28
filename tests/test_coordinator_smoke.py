@@ -120,7 +120,7 @@ def test_create_node_runs_requires_run() -> None:
             parent_node_run_id="root_node_run",
             node_runs=[
                 NodeRunCreateSpec(
-                    node_type_ref=NodeTypeRef(node_type_id="atomic.echo", version="0.1.0"),
+                    node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.1"),
                     inputs={"ping": "pong"},
                 )
             ],
@@ -155,7 +155,7 @@ def test_complete_node_run_persists_error_in_extensions() -> None:
             parent_node_run_id=run.root_node_run_id,
             node_runs=[
                 NodeRunCreateSpec(
-                    node_type_ref=NodeTypeRef(node_type_id="atomic.echo", version="0.1.0"),
+                    node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.1"),
                     inputs={"ping": "pong"},
                 )
             ],
