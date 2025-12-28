@@ -7,6 +7,8 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .pyrightcache/
+.coverage
+runs/
 .env
 .env.local
 .env.*
