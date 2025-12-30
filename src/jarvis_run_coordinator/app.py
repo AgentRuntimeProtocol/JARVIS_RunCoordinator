@@ -147,9 +147,6 @@ def create_app():
     )
 
 
-app = create_app()
-
-
 def _require_url(name: str) -> str:
     value = (os.environ.get(name) or "").strip()
     if not value:
@@ -162,3 +159,6 @@ def _audience_from_env(audience_var: str, *, default: str | None) -> str | None:
     if value:
         return value
     return default
+
+
+app = create_app()

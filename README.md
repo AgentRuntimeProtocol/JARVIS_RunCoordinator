@@ -68,8 +68,27 @@ Internal service clients:
 - System-of-record: Runs + NodeRuns persist via Run Store (HTTP) and RunEvents append via Event Stream (NDJSON).
 - Root creation: `start_run` creates the Run + root NodeRun, emits `run_started` + `node_run_assigned`, enforces `run.start`, then optionally dispatches.
 - Composite ingestion: `create_node_runs` only allows composite parents, persists metadata (`candidate_set_id`, `binding_decision`) in `NodeRun.extensions`, and emits `composite_decomposed` / `candidate_set_generated` / `subtask_mapped` when present.
+- Constraint enforcement (mechanical): structural limits (`max_depth`, `max_children_per_composite`, `max_total_nodes_per_run`, `max_decomposition_rounds_per_node`) are enforced during `create_node_runs`; candidate allow/deny lists are enforced at dispatch.
+- Idempotent child creation: when `NodeRunCreateSpec.idempotency_key` is set, repeated calls return the same NodeRun (or 409 if the spec differs).
 - Best-effort dispatch: when `JARVIS_RUN_COORDINATOR_AUTO_DISPATCH=true`, queued NodeRuns are dispatched in-process via `asyncio.create_task`.
 - Policy posture: PDP is optional; when unconfigured, policy is deny-by-default unless `JARVIS_POLICY_PROFILE=dev-allow`.
+
+### Extensions
+
+The ARP `Run` / `NodeRun` models include an `extensions` field used for non-normative metadata.
+This coordinator persists several spec-adjacent values into `extensions` so they are queryable later.
+
+Written/consumed by the coordinator:
+- `constraints` (on both `Run.extensions` and `NodeRun.extensions`): persisted effective `ConstraintEnvelope` used for later structural enforcement.
+- `decomposition_rounds` (on `NodeRun.extensions` for composite nodes): increments when the coordinator accepts decomposition and is used for `max_decomposition_rounds_per_node`.
+- `completion_error` (on `NodeRun.extensions`): copied from `complete_node_run` error payload for post-mortem debugging.
+
+Written by callers (e.g., Composite Executor) and persisted by the coordinator on `NodeRun.extensions`:
+- `candidate_set_id` (Selection linkage)
+- `binding_decision` (chosen candidate + rationale)
+- `idempotency_key` (mirrors create spec idempotency; used for deterministic child IDs)
+
+Full cross-stack list: `Business_Docs/JARVIS/Extensions.md`.
 
 ### Notes on API surface
 
