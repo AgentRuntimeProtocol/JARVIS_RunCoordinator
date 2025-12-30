@@ -88,7 +88,7 @@ Written by callers (e.g., Composite Executor) and persisted by the coordinator o
 - `binding_decision` (chosen candidate + rationale)
 - `idempotency_key` (mirrors create spec idempotency; used for deterministic child IDs)
 
-Full cross-stack list: `Business_Docs/JARVIS/Extensions.md`.
+Full cross-stack list: `https://github.com/AgentRuntimeProtocol/BusinessDocs/blob/main/Business_Docs/JARVIS/Extensions.md`.
 
 ### Notes on API surface
 
