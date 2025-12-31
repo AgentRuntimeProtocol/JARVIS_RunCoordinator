@@ -108,7 +108,7 @@ def test_atomic_executor_gateway_success(monkeypatch) -> None:
     request = AtomicExecuteRequest(
         run_id="run-1",
         node_run_id="node-1",
-        node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.2"),
+        node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.3"),
         inputs={"ping": "pong"},
     )
     result = asyncio.run(gateway.execute_atomic_node_run(request))
@@ -160,7 +160,7 @@ def test_selection_gateway_success(monkeypatch) -> None:
             subtask_id="subtask-1",
             candidates=[
                 Candidate(
-                    node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.2"),
+                    node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.3"),
                     score=0.5,
                 )
             ],
@@ -192,12 +192,12 @@ def test_node_registry_gateway_success(monkeypatch) -> None:
     responses = {
         "publish_node_type": NodeType(
             node_type_id="jarvis.core.echo",
-            version="0.3.2",
+            version="0.3.3",
             kind=NodeKind.atomic,
         ),
         "get_node_type": NodeType(
             node_type_id="jarvis.core.echo",
-            version="0.3.2",
+            version="0.3.3",
             kind=NodeKind.atomic,
         ),
         "list_node_types": [],
@@ -216,11 +216,11 @@ def test_node_registry_gateway_success(monkeypatch) -> None:
 
     node_type = NodeType(
         node_type_id="jarvis.core.echo",
-        version="0.3.2",
+        version="0.3.3",
         kind=NodeKind.atomic,
     )
     assert asyncio.run(gateway.publish_node_type(node_type)).node_type_id == "jarvis.core.echo"
-    assert asyncio.run(gateway.get_node_type("jarvis.core.echo", "0.3.2")).version == "0.3.2"
+    assert asyncio.run(gateway.get_node_type("jarvis.core.echo", "0.3.3")).version == "0.3.3"
     assert asyncio.run(gateway.list_node_types()) == []
     assert asyncio.run(gateway.health()).status == Status.ok
     assert asyncio.run(gateway.version()).service_name == "svc"
