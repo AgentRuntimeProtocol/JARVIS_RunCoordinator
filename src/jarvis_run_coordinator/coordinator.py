@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import uuid
 from enum import StrEnum
@@ -67,6 +68,8 @@ from .clients import (
     SelectionGatewayClient,
 )
 from .utils import now
+
+logger = logging.getLogger(__name__)
 
 
 class RunEventType(StrEnum):
@@ -179,6 +182,12 @@ class RunCoordinator(BaseRunCoordinatorServer):
             The run_id must already exist.
         """
         body = request.body
+        logger.info(
+            "Create NodeRuns requested (run_id=%s, parent_node_run_id=%s, count=%s)",
+            body.run_id,
+            body.parent_node_run_id,
+            len(body.node_runs),
+        )
 
         # Sanity check: the run must exist (no orphan node runs).
         run = await self._get_run_or_404(body.run_id)
@@ -382,6 +391,12 @@ class RunCoordinator(BaseRunCoordinatorServer):
             # A future design can replace this with a durable queue/worker model.
             if self._auto_dispatch:
                 asyncio.create_task(self._dispatch_node_run(node_run.node_run_id))
+        logger.info(
+            "Create NodeRuns completed (run_id=%s, created=%s, new=%s)",
+            body.run_id,
+            len(created),
+            new_count,
+        )
         return NodeRunsCreateResponse(node_runs=created, extensions=body.extensions)
 
     async def get_node_run(self, request: RunCoordinatorGetNodeRunRequest) -> NodeRun:
@@ -415,6 +430,14 @@ class RunCoordinator(BaseRunCoordinatorServer):
             }
         )
         await self._run_store.update_node_run(updated)
+        status = request.body.evaluation_result.status
+        status_value = status.value if hasattr(status, "value") else status
+        logger.info(
+            "NodeRun evaluated (node_run_id=%s, status=%s, reason_code=%s)",
+            node_run.node_run_id,
+            status_value,
+            request.body.evaluation_result.reason_code,
+        )
 
         # Emit durable events for observability/auditing.
         await self._emit_event(
@@ -468,6 +491,13 @@ class RunCoordinator(BaseRunCoordinatorServer):
             }
         )
         await self._run_store.update_node_run(updated)
+        logger.info("NodeRun completed (node_run_id=%s, state=%s)", updated.node_run_id, updated.state)
+        if body.error is not None:
+            logger.warning(
+                "NodeRun error (node_run_id=%s, code=%s)",
+                updated.node_run_id,
+                body.error.code,
+            )
 
         # Emit completion events.
         if updated.kind == NodeKind.atomic:
@@ -526,6 +556,12 @@ class RunCoordinator(BaseRunCoordinatorServer):
             extensions=run_extensions,
         )
         await self._run_store.create_run(run)
+        logger.info(
+            "Run %s started (root_node_type_id=%s, version=%s)",
+            run_id,
+            request.body.root_node_type_ref.node_type_id,
+            request.body.root_node_type_ref.version,
+        )
         await self._emit_event(
             run_id=run_id,
             node_run_id=None,
@@ -562,6 +598,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
             extensions=root_extensions,
         )
         await self._run_store.create_node_run(root_node_run)
+        logger.info("Root NodeRun %s queued for run %s", root_node_run_id, run_id)
         await self._emit_event(
             run_id=run_id,
             node_run_id=root_node_run_id,
@@ -576,6 +613,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
             node_run=root_node_run,
         )
         if not self._policy_allows(decision):
+            logger.warning("Policy denied run start (run_id=%s)", run_id)
             await self._fail_node_run(root_node_run_id, code="policy_denied", message="Run start denied by policy")
             updated_run = await self._run_store.get_run(run_id)
             return updated_run or run
@@ -583,6 +621,8 @@ class RunCoordinator(BaseRunCoordinatorServer):
         # Kick off dispatch if configured (in v0.3.x this is an in-process task).
         if self._auto_dispatch:
             asyncio.create_task(self._dispatch_node_run(root_node_run_id))
+        else:
+            logger.info("Auto-dispatch disabled; NodeRun queued (node_run_id=%s)", root_node_run_id)
         return run
 
     async def get_run(self, request: RunCoordinatorGetRunRequest) -> Run:
@@ -604,6 +644,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
         Potential modifications:
           - Cascade cancellation to active NodeRuns and executors.
         """
+        logger.info("Run cancel requested (run_id=%s)", request.params.run_id)
         # Load the Run.
         run = await self.get_run(
             RunCoordinatorGetRunRequest(params=RunCoordinatorGetRunParams(run_id=request.params.run_id))
@@ -622,6 +663,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
             event_type=RunEventType.run_completed,
             data={"state": updated.state},
         )
+        logger.info("Run canceled (run_id=%s, state=%s)", updated.run_id, updated.state)
         return updated
 
     async def stream_run_events(self, request: RunCoordinatorStreamRunEventsRequest) -> str:
@@ -631,6 +673,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
         Args:
           - request: RunCoordinatorStreamRunEventsRequest with run_id.
         """
+        logger.info("Run events stream requested (run_id=%s)", request.params.run_id)
         return await self._event_stream.stream_run_events(request.params.run_id)
 
     async def stream_node_run_events(self, request: RunCoordinatorStreamNodeRunEventsRequest) -> str:
@@ -640,6 +683,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
         Args:
           - request: RunCoordinatorStreamNodeRunEventsRequest with node_run_id.
         """
+        logger.info("NodeRun events stream requested (node_run_id=%s)", request.params.node_run_id)
         # Load root NodeRun and find all descendants within this run.
         node_run = await self._get_node_run_or_404(request.params.node_run_id)
         descendant_ids = await self._collect_descendant_ids(node_run)
@@ -666,12 +710,23 @@ class RunCoordinator(BaseRunCoordinatorServer):
         # Only dispatch queued NodeRuns. Anything else is a no-op.
         if (node_run := await self._run_store.get_node_run(node_run_id)) is None or node_run.state != NodeRunState.queued:
             return
+        logger.info(
+            "Dispatching NodeRun %s (run_id=%s, node_type_id=%s)",
+            node_run_id,
+            node_run.run_id,
+            node_run.node_type_ref.node_type_id,
+        )
 
         # Run is optional here: if it cannot be loaded, policy falls back to deny-by-default.
         run = await self._run_store.get_run(node_run.run_id)
 
         # Resolve atomic vs composite. Prefer registry lookup; fall back to node_type_id prefix inference.
         if (kind := await self._resolve_node_kind(node_run)) is None:
+            logger.warning(
+                "Unable to resolve NodeKind for NodeRun %s (node_type_id=%s)",
+                node_run_id,
+                node_run.node_type_ref.node_type_id,
+            )
             await self._fail_node_run(node_run_id, code="unknown_node_kind", message="Unable to resolve node kind")
             return
         if node_run.kind != kind:
@@ -702,11 +757,13 @@ class RunCoordinator(BaseRunCoordinatorServer):
         # Coordinator is the enforcement point; executors should not run work without an allow decision.
         decision = await self._policy_decide(action="node.run.execute", run=run, node_run=node_run)
         if not self._policy_allows(decision):
+            logger.warning("Policy denied NodeRun %s", node_run_id)
             await self._fail_node_run(node_run_id, code="policy_denied", message="NodeRun denied by policy")
             return
 
         if kind == NodeKind.atomic:
             if self._atomic_executor is None:
+                logger.warning("Atomic Executor missing; cannot dispatch NodeRun %s", node_run_id)
                 await self._fail_node_run(
                     node_run_id,
                     code="atomic_executor_unconfigured",
@@ -728,8 +785,24 @@ class RunCoordinator(BaseRunCoordinatorServer):
                     )
                 )
             except ArpServerError as exc:
-                await self._fail_node_run(node_run_id, code="atomic_executor_unavailable", message=str(exc))
+                logger.warning(
+                    "Atomic Executor request failed for NodeRun %s (%s): %s",
+                    node_run_id,
+                    exc.code,
+                    exc.message,
+                )
+                await self._fail_node_run(
+                    node_run_id,
+                    code=exc.code or "atomic_executor_unavailable",
+                    message=exc.message,
+                    details=exc.details,
+                )
                 return
+            logger.info(
+                "Atomic NodeRun executed (node_run_id=%s, state=%s)",
+                node_run_id,
+                result.state,
+            )
 
             # For atomic work, we treat executor completion as the evaluation input (simple v0.3.x posture).
             evaluation = EvaluationResult(
@@ -760,6 +833,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
 
         if kind == NodeKind.composite:
             if self._composite_executor is None:
+                logger.warning("Composite Executor missing; cannot dispatch NodeRun %s", node_run_id)
                 await self._fail_node_run(
                     node_run_id,
                     code="composite_executor_unconfigured",
@@ -767,6 +841,7 @@ class RunCoordinator(BaseRunCoordinatorServer):
                 )
                 return
             if not self._public_url:
+                logger.warning("Coordinator public URL missing; cannot dispatch NodeRun %s", node_run_id)
                 await self._fail_node_run(
                     node_run_id,
                     code="coordinator_url_unconfigured",
@@ -793,14 +868,28 @@ class RunCoordinator(BaseRunCoordinatorServer):
                     )
                 )
             except ArpServerError as exc:
-                await self._fail_node_run(node_run_id, code="composite_executor_unavailable", message=str(exc))
+                logger.warning(
+                    "Composite Executor request failed for NodeRun %s (%s): %s",
+                    node_run_id,
+                    exc.code,
+                    exc.message,
+                )
+                await self._fail_node_run(
+                    node_run_id,
+                    code=exc.code or "composite_executor_unavailable",
+                    message=exc.message,
+                    details=exc.details,
+                )
                 return
             if not response.accepted:
+                logger.warning("Composite Executor rejected NodeRun %s: %s", node_run_id, response.message)
                 await self._fail_node_run(
                     node_run_id,
                     code="composite_rejected",
                     message=response.message or "Composite assignment rejected",
                 )
+            else:
+                logger.info("Composite assignment accepted (node_run_id=%s)", node_run_id)
             return
 
     async def _get_run_or_404(
@@ -835,14 +924,22 @@ class RunCoordinator(BaseRunCoordinatorServer):
             )
         return node_run
 
-    async def _fail_node_run(self, node_run_id: str, *, code: str, message: str) -> None:
+    async def _fail_node_run(
+        self,
+        node_run_id: str,
+        *,
+        code: str,
+        message: str,
+        details: dict | None = None,
+    ) -> None:
         """Mark a NodeRun as failed using a consistent error envelope."""
+        logger.warning("NodeRun %s failed (%s): %s", node_run_id, code, message)
         await self.complete_node_run(
             RunCoordinatorCompleteNodeRunRequest(
                 params=RunCoordinatorCompleteNodeRunParams(node_run_id=node_run_id),
                 body=NodeRunCompleteRequest(
                     state=NodeRunTerminalState.failed,
-                    error=Error(code=code, message=message),
+                    error=Error(code=code, message=message, details=details),
                 ),
             )
         )
@@ -891,7 +988,15 @@ class RunCoordinator(BaseRunCoordinatorServer):
         }
         if data is not None:
             payload["data"] = data
-        await self._event_stream.append_events([payload])
+        try:
+            await self._event_stream.append_events([payload])
+        except ArpServerError as exc:
+            logger.warning(
+                "Event stream append failed (%s): %s",
+                exc.code,
+                exc.message,
+            )
+            raise
 
     async def _resolve_node_kind(self, node_run: NodeRun) -> NodeKind | None:
         """Resolve NodeKind for a NodeRun (prefer stored kind; otherwise derive from the NodeTypeRef)."""
@@ -990,6 +1095,14 @@ class RunCoordinator(BaseRunCoordinatorServer):
             node_run_id=node_run.node_run_id if node_run is not None else None,
             event_type=RunEventType.policy_decided,
             data={k: v for k, v in data.items() if v is not None},
+        )
+        logger.info(
+            "Policy decision (action=%s, run_id=%s, node_run_id=%s, decision=%s, reason_code=%s)",
+            action,
+            run.run_id,
+            node_run.node_run_id if node_run is not None else None,
+            decision_value,
+            decision.reason_code,
         )
         return decision
 

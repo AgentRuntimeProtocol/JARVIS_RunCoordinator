@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 from .auth import auth_client_from_env_optional, auth_settings_from_env_or_dev_secure
@@ -16,11 +17,19 @@ from .clients import (
 from .coordinator import RunCoordinator
 from .utils import normalize_base_url
 
+logger = logging.getLogger(__name__)
+
 
 def create_app():
     run_store_url = _require_url("JARVIS_RUN_STORE_URL")
     event_stream_url = _require_url("JARVIS_EVENT_STREAM_URL")
     artifact_store_url = _require_url("JARVIS_ARTIFACT_STORE_URL")
+    logger.info(
+        "Run Coordinator core stores (run_store_url=%s, event_stream_url=%s, artifact_store_url=%s)",
+        run_store_url,
+        event_stream_url,
+        artifact_store_url,
+    )
 
     if (auth_client := auth_client_from_env_optional()) is None:
         raise RuntimeError("ARP_AUTH_CLIENT_ID and ARP_AUTH_CLIENT_SECRET are required for outbound auth.")
@@ -70,6 +79,14 @@ def create_app():
         or ""
     ).strip()
     pdp_url = (os.environ.get("JARVIS_PDP_URL") or os.environ.get("ARP_PDP_URL") or "").strip()
+    logger.info(
+        "Run Coordinator services (atomic=%s, composite=%s, selection=%s, node_registry=%s, pdp=%s)",
+        bool(atomic_url),
+        bool(composite_url),
+        bool(selection_url),
+        bool(node_registry_url),
+        bool(pdp_url),
+    )
 
     atomic_executor = (
         AtomicExecutorGatewayClient(
@@ -132,6 +149,12 @@ def create_app():
         else None
     )
 
+    auth_settings = auth_settings_from_env_or_dev_secure()
+    logger.info(
+        "Run Coordinator auth settings (mode=%s, issuer=%s)",
+        getattr(auth_settings, "mode", None),
+        getattr(auth_settings, "issuer", None),
+    )
     return RunCoordinator(
         atomic_executor=atomic_executor,
         composite_executor=composite_executor,
@@ -143,7 +166,7 @@ def create_app():
         artifact_store=artifact_store,
     ).create_app(
         title="JARVIS Run Coordinator",
-        auth_settings=auth_settings_from_env_or_dev_secure(),
+        auth_settings=auth_settings,
     )
 
 

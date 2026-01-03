@@ -20,7 +20,7 @@ def _node_run(node_run_id: str = "node-1", run_id: str = "run-1") -> NodeRun:
     return NodeRun(
         node_run_id=node_run_id,
         run_id=run_id,
-        node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.3"),
+        node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.5"),
         state=NodeRunState.queued,
     )
 
