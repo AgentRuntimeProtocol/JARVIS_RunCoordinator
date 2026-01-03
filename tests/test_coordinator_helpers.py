@@ -163,7 +163,7 @@ def test_idempotent_node_run_id() -> None:
 
 def test_assert_idempotent_match() -> None:
     spec = NodeRunCreateSpec(
-        node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.5"),
+        node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.7"),
         inputs={"ping": "pong"},
     )
     node_run = NodeRun(
@@ -188,7 +188,7 @@ def test_assert_idempotent_match() -> None:
         _assert_idempotent_match(
             node_run,
             spec=NodeRunCreateSpec(
-                node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.5"),
+                node_type_ref=NodeTypeRef(node_type_id="jarvis.core.echo", version="0.3.7"),
                 inputs={"ping": "different"},
             ),
             run_id="run-1",
