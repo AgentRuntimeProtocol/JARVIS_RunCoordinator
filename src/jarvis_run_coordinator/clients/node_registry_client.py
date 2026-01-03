@@ -23,7 +23,7 @@ from arp_standard_model import (
 )
 from arp_standard_server import ArpServerError
 
-from ..auth import client_credentials_token
+from ..auth import client_credentials_token, outbound_auth_disabled
 
 class NodeRegistryGatewayClient:
     """Outgoing Node Registry client wrapper for the Run Coordinator."""
@@ -104,6 +104,9 @@ class NodeRegistryGatewayClient:
             ) from exc
 
     async def _client_for(self) -> NodeRegistryClient:
+        if outbound_auth_disabled():
+            return self._client_factory(self._client.raw_client)
+
         bearer_token = await client_credentials_token(
             self._auth_client,
             audience=self._audience,

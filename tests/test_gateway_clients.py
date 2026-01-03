@@ -226,6 +226,36 @@ def test_node_registry_gateway_success(monkeypatch) -> None:
     assert asyncio.run(gateway.version()).service_name == "svc"
 
 
+def test_node_registry_gateway_skips_auth_when_disabled(monkeypatch) -> None:
+    responses = {
+        "get_node_type": NodeType(
+            node_type_id="jarvis.composite.planner.general",
+            version="0.3.3",
+            kind=NodeKind.composite,
+        ),
+        "health": _health(),
+        "version": _version(),
+    }
+    dummy = DummyClient(responses)
+
+    def _should_not_be_called(*_args, **_kwargs) -> str:
+        raise AssertionError("client_credentials_token should not be called when ARP_AUTH_MODE=disabled")
+
+    monkeypatch.setenv("ARP_AUTH_MODE", "disabled")
+    monkeypatch.setattr(registry_module, "client_credentials_token", _should_not_be_called)
+
+    gateway = NodeRegistryGatewayClient(
+        base_url="http://registry",
+        auth_client=cast(AuthClient, DummyAuthClient()),
+        client=cast(Any, dummy),
+        client_factory=cast(Any, lambda raw: dummy),
+    )
+
+    client = asyncio.run(gateway._client_for())
+    assert client is dummy
+    assert "Authorization" not in dummy.raw_client.headers
+
+
 def test_pdp_gateway_success(monkeypatch) -> None:
     responses = {
         "decide_policy": PolicyDecision(decision=PolicyDecisionOutcome.allow),

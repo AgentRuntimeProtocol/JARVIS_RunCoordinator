@@ -32,6 +32,19 @@ def auth_client_from_env_optional() -> AuthClient | None:
         raise RuntimeError(f"Invalid ARP_AUTH_* token exchange config: {exc}") from exc
 
 
+def outbound_auth_disabled() -> bool:
+    """
+    Return True when outbound auth should be skipped.
+
+    In `dev-insecure`, services are expected to accept intra-stack traffic without JWTs, so
+    clients should avoid token exchange and avoid sending Authorization headers.
+    """
+    try:
+        return AuthSettings.from_env().mode == "disabled"
+    except Exception:
+        return (os.environ.get("ARP_AUTH_MODE") or "").strip().lower() == "disabled"
+
+
 async def client_credentials_token(
     auth_client: AuthClient,
     *,
