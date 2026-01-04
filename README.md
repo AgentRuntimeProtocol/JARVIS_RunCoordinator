@@ -54,7 +54,7 @@ If all you need is to change NodeRun lifecycle behavior and storage, edit:
 Outgoing client wrappers (coordinator -> other components):
 - `src/jarvis_run_coordinator/clients/atomic_executor_client.py`
 - `src/jarvis_run_coordinator/clients/composite_executor_client.py`
-- `src/jarvis_run_coordinator/clients/selection_client.py` (reserved; not used by coordinator logic in v0.3.7)
+- `src/jarvis_run_coordinator/clients/selection_client.py` (reserved; not used by coordinator logic in v0.3.8)
 - `src/jarvis_run_coordinator/clients/node_registry_client.py`
 - `src/jarvis_run_coordinator/clients/pdp_client.py`
 
@@ -141,7 +141,7 @@ Downstream services (optional; enable features when set):
 - `JARVIS_COMPOSITE_EXECUTOR_URL` (enables composite dispatch)
 - `JARVIS_NODE_REGISTRY_URL` (improves NodeKind resolution)
 - `JARVIS_PDP_URL` (enables centralized policy)
-- `JARVIS_SELECTION_URL` (reserved; coordinator does not call Selection in v0.3.7)
+- `JARVIS_SELECTION_URL` (reserved; coordinator does not call Selection in v0.3.8)
 
 Downstream audiences (optional):
 - `JARVIS_ATOMIC_EXECUTOR_AUDIENCE` (default `arp-jarvis-atomicexecutor`)
@@ -152,7 +152,7 @@ Downstream audiences (optional):
 
 Coordinator behavior:
 - `JARVIS_RUN_COORDINATOR_PUBLIC_URL` (required only to dispatch composites; passed to Composite Executor)
-- `JARVIS_RUN_COORDINATOR_AUTO_DISPATCH` (default true; if false, NodeRuns remain queued in v0.3.7)
+- `JARVIS_RUN_COORDINATOR_AUTO_DISPATCH` (default true; if false, NodeRuns remain queued in v0.3.8)
 
 Policy posture:
 - `JARVIS_POLICY_PROFILE=dev-allow` (explicitly allow for local dev; otherwise deny-by-default when PDP is unset)

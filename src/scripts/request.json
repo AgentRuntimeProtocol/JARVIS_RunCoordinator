@@ -3,7 +3,7 @@
   "parent_node_run_id": "node_run_root",
   "node_runs": [
     {
-      "node_type_ref": { "node_type_id": "jarvis.core.echo", "version": "0.3.7" },
+      "node_type_ref": { "node_type_id": "jarvis.core.echo", "version": "0.3.8" },
       "inputs": { "message": "Hello from JARVIS Run Coordinator" }
     }
   ]
